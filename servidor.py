@@ -18,6 +18,7 @@ DB_CONFIG = {
 def get_db_connection():
     """Tenta estabelecer e retornar uma nova conexão com o DB."""
     try:
+        # Garante que as conexões sejam fechadas corretamente pelo `with`
         conn = psycopg2.connect(**DB_CONFIG)
         return conn
     except Exception as e:
@@ -26,7 +27,8 @@ def get_db_connection():
 
 
 def create_tasks_table():
-    """Cria a tabela 'tarefas' se ela não existir."""
+    """Cria a tabela 'tarefas' se ela não existir. 
+    O campo 'done' é agora BOOLEAN (tipo nativo para True/False)."""
     conn = get_db_connection()
     if not conn:
         return
@@ -35,9 +37,9 @@ def create_tasks_table():
         sql = """
         CREATE TABLE IF NOT EXISTS tarefas (
             id SERIAL PRIMARY KEY,
-            titulo VARCHAR(100) NOT NULL,
-            descricao TEXT,
-            status VARCHAR(20) DEFAULT 'pendente',
+            title VARCHAR(100) NOT NULL,
+            description TEXT,
+            done BOOLEAN DEFAULT FALSE, -- CORREÇÃO: Usando BOOLEAN em vez de VARCHAR
             criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         """
@@ -49,10 +51,11 @@ def create_tasks_table():
         print(f"Erro ao criar tabela: {e}")
         conn.rollback()
     finally:
-        conn.close()
+        if conn:
+            conn.close()
 
 
-def db_create_task(titulo, descricao):
+def db_create_task(title, description):
     """Insere uma nova tarefa no DB."""
     conn = get_db_connection()
     if not conn:
@@ -60,11 +63,12 @@ def db_create_task(titulo, descricao):
     task_id = None
     try:
         cur = conn.cursor()
+        # Inserimos a tarefa com o default FALSE para 'done'
         sql = """
-        INSERT INTO tarefas (titulo, descricao) VALUES (%s, %s) 
+        INSERT INTO tarefas (title, description) VALUES (%s, %s) 
         RETURNING id;
         """
-        cur.execute(sql, (titulo, descricao))
+        cur.execute(sql, (title, description))
         task_id = cur.fetchone()[0]
         conn.commit()
         cur.close()
@@ -72,7 +76,8 @@ def db_create_task(titulo, descricao):
         print(f"Erro ao criar tarefa: {e}")
         conn.rollback()
     finally:
-        conn.close()
+        if conn:
+            conn.close()
     return task_id
 
 
@@ -84,18 +89,20 @@ def db_get_all_tasks():
     tasks = []
     try:
         cur = conn.cursor()
-        sql = "SELECT id, titulo, descricao, status, criado_em FROM tarefas ORDER BY id;"
+        sql = "SELECT id, title, description, done, criado_em FROM tarefas ORDER BY id;"
         cur.execute(sql)
         columns = [desc[0] for desc in cur.description]
         for row in cur.fetchall():
             task = dict(zip(columns, row))
+            # Converte o timestamp para ISO format para JSON
             task['criado_em'] = task['criado_em'].isoformat()
             tasks.append(task)
         cur.close()
     except Exception as e:
         print(f"Erro ao buscar todas as tarefas: {e}")
     finally:
-        conn.close()
+        if conn:
+            conn.close()
     return tasks
 
 
@@ -107,7 +114,7 @@ def db_get_task_by_id(task_id):
     task = None
     try:
         cur = conn.cursor()
-        sql = "SELECT id, titulo, descricao, status, criado_em FROM tarefas WHERE id = %s;"
+        sql = "SELECT id, title, description, done, criado_em FROM tarefas WHERE id = %s;"
         cur.execute(sql, (task_id,))
         row = cur.fetchone()
         if row:
@@ -118,28 +125,33 @@ def db_get_task_by_id(task_id):
     except Exception as e:
         print(f"Erro ao buscar tarefa {task_id}: {e}")
     finally:
-        conn.close()
+        if conn:
+            conn.close()
     return task
 
 
-def db_update_task(task_id, titulo=None, descricao=None, status=None):
-    """Atualiza título, descrição e/ou status de uma tarefa."""
+def db_update_task(task_id, title=None, description=None, done=None):
+    """Atualiza title, description e/ou done de uma tarefa."""
     conn = get_db_connection()
     if not conn:
         return False
     updates = []
     params = []
-    if titulo is not None:
-        updates.append("titulo = %s")
-        params.append(titulo)
-    if descricao is not None:
-        updates.append("descricao = %s")
-        params.append(descricao)
-    if status is not None:
-        updates.append("status = %s")
-        params.append(status)
+    if title is not None:
+        updates.append("title = %s")
+        params.append(title)
+    if description is not None:
+        updates.append("description = %s")
+        params.append(description)
+    
+    # O Python bool (True/False) é passado diretamente para o BOOLEAN do PostgreSQL
+    if done is not None:
+        updates.append("done = %s")
+        params.append(done) # Correção: 'done' já é um bool (True/False)
+        
     if not updates:
         return False
+        
     params.append(task_id)
     try:
         cur = conn.cursor()
@@ -154,7 +166,8 @@ def db_update_task(task_id, titulo=None, descricao=None, status=None):
         conn.rollback()
         return False
     finally:
-        conn.close()
+        if conn:
+            conn.close()
 
 
 def db_delete_task(task_id):
@@ -175,7 +188,8 @@ def db_delete_task(task_id):
         conn.rollback()
         return False
     finally:
-        conn.close()
+        if conn:
+            conn.close()
 
 
 # --- Classe do Servidor HTTP Personalizado ---
@@ -194,6 +208,7 @@ class TaskServer(BaseHTTPRequestHandler):
         if path_parts == ['tasks']:
             tasks = db_get_all_tasks()
             self._set_headers(200)
+            # O psycopg2 já converte o BOOLEAN do SQL para o bool do Python, que o json.dumps transforma em JSON boolean (true/false)
             self.wfile.write(json.dumps(tasks).encode('utf-8'))
             return
 
@@ -225,17 +240,19 @@ class TaskServer(BaseHTTPRequestHandler):
             post_data = self.rfile.read(content_length)
             try:
                 data = json.loads(post_data.decode('utf-8'))
-                titulo = data.get('titulo')
-                descricao = data.get('descricao', None)
+                title = data.get('title')
+                # O cliente pode opcionalmente enviar 'description'
+                description = data.get('description', None)
             except (json.JSONDecodeError, AttributeError):
                 self._set_headers(400)
                 self.wfile.write(json.dumps({"error": "JSON inválido"}).encode('utf-8'))
                 return
-            if not titulo:
+            if not title:
                 self._set_headers(400)
-                self.wfile.write(json.dumps({"error": "O campo 'titulo' é obrigatório"}).encode('utf-8'))
+                self.wfile.write(json.dumps({"error": "O campo 'title' é obrigatório"}).encode('utf-8'))
                 return
-            task_id = db_create_task(titulo, descricao)
+                
+            task_id = db_create_task(title, description)
             if task_id:
                 task = db_get_task_by_id(task_id)
                 self._set_headers(201)
@@ -267,16 +284,19 @@ class TaskServer(BaseHTTPRequestHandler):
                 self._set_headers(400)
                 self.wfile.write(json.dumps({"error": "JSON inválido"}).encode('utf-8'))
                 return
+                
             if not db_get_task_by_id(task_id):
                 self._set_headers(404)
                 self.wfile.write(json.dumps({"error": "Tarefa não encontrada"}).encode('utf-8'))
                 return
+                
             updated = db_update_task(
                 task_id,
-                titulo=data.get('titulo'),
-                descricao=data.get('descricao'),
-                status=data.get('status')
+                title=data.get('title'),
+                description=data.get('description'),
+                done=data.get('done') # 'done' é True/False
             )
+            
             if updated:
                 task = db_get_task_by_id(task_id)
                 self._set_headers(200)
@@ -300,9 +320,11 @@ class TaskServer(BaseHTTPRequestHandler):
                 self._set_headers(400)
                 self.wfile.write(json.dumps({"error": "ID inválido"}).encode('utf-8'))
                 return
+                
             deleted = db_delete_task(task_id)
             if deleted:
-                self.send_response(204)
+                # Código de sucesso para exclusão (No Content)
+                self.send_response(204) 
                 self.end_headers()
             else:
                 self._set_headers(404)
@@ -317,6 +339,7 @@ class TaskServer(BaseHTTPRequestHandler):
 def run_server():
     HOST_NAME = 'localhost'
     SERVER_PORT = 8000
+    # Garante que a tabela exista com o esquema de dados correto
     create_tasks_table()
     webServer = ThreadingHTTPServer((HOST_NAME, SERVER_PORT), TaskServer)
     print("-" * 50)
