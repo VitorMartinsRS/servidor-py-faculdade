@@ -9,8 +9,8 @@ from urllib.parse import urlparse
 DB_CONFIG = {
     "dbname": os.getenv("DB_NAME", "postgres"),
     "user": os.getenv("DB_USER", "postgres"),
-    "password": os.getenv("DB_PASS", "99-bS5Ng-@u$mbP"),
-    "host": os.getenv("DB_HOST", "db.gccebgwujehclomihyop.supabase.co"),
+    "password": os.getenv("DB_PASS", "V!9p/TmUwMwDUCd"),
+    "host": os.getenv("DB_HOST", "db.wveigyviaktmdrdczjyn.supabase.co"),
     "port": int(os.getenv("DB_PORT", 5432)),
 }
 
