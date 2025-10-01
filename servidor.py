@@ -131,7 +131,7 @@ def db_get_task_by_id(task_id):
 
 
 def db_update_task(task_id, title=None, description=None, done=None):
-    """Atualiza title, description e/ou done de uma tarefa."""
+    """Atualiza title, description e done de uma tarefa."""
     conn = get_db_connection()
     if not conn:
         return False
@@ -144,7 +144,7 @@ def db_update_task(task_id, title=None, description=None, done=None):
         updates.append("description = %s")
         params.append(description)
     
-    # O Python bool (True/False) é passado diretamente para o BOOLEAN do PostgreSQL
+
     if done is not None:
         updates.append("done = %s")
         params.append(done) # Correção: 'done' já é um bool (True/False)
@@ -350,7 +350,7 @@ def run_server():
         webServer.serve_forever()
     except KeyboardInterrupt:
         pass
-    webServer.server_close()
+    webServer.server_close()    
     print("Servidor encerrado.")
 
 

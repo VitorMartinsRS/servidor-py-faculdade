@@ -1,32 +1,43 @@
 import requests
+import requests
 
 BASE_URL = "http://localhost:8000/tasks"
 
 def listar_tarefas():
-    resposta = requests.get(BASE_URL)
-    if resposta.status_code == 200:
-        tarefas = resposta.json()
-        if not tarefas:
-            print("Nenhuma tarefa encontrada.")
+    try:
+        resposta = requests.get(BASE_URL)
+        if resposta.status_code == 200:
+            tarefas = resposta.json()
+            if not tarefas:
+                print("Nenhuma tarefa encontrada.")
+            else:
+                for tarefa in tarefas:
+                    done = "✅ Concluída" if tarefa['done'] else "❌ Pendente"
+                    print(f"ID: {tarefa['id']} | {tarefa['title']} | {done}")
+                    print(f"Descrição: {tarefa.get('description', 'Sem descrição')}")
+                    print("-" * 50)
         else:
-            for tarefa in tarefas:
-                done = "✅ Concluída" if tarefa['done'] else "❌ Pendente"
-                print(f"ID: {tarefa['id']} | {tarefa['title']} | {done}")
-                print(f"Descrição: {tarefa.get('description', 'Sem descrição')}")
-                print("-" * 50)
-    else:
-        print("Erro ao buscar tarefas.")
+            print("Erro ao buscar tarefas.")
+    except requests.exceptions.ConnectionError:
+        print("⚠️ Servidor está desligado ou inacessível. Tente novamente mais tarde")
+    except requests.exceptions.RequestException as e:
+        print(f"⚠️ Erro de requisição: {e}")
 
 def criar_tarefa(title):
     description = input("Digite a descrição da tarefa (opcional): ")
     nova_tarefa = {"title": title}
-    if description.strip():  # envia apenas se o usuário digitou algo
+    if description.strip():
         nova_tarefa["description"] = description
-    resposta = requests.post(BASE_URL, json=nova_tarefa)
-    if resposta.status_code == 201:
-        print("Tarefa criada com sucesso!")
-    else:
-        print("Erro ao criar tarefa.")
+    try:
+        resposta = requests.post(BASE_URL, json=nova_tarefa)
+        if resposta.status_code == 201:
+            print("Tarefa criada com sucesso!")
+        else:
+            print("Erro ao criar tarefa.")
+    except requests.exceptions.ConnectionError:
+        print("⚠️ Servidor está desligado ou inacessível. Tente novamente mais tarde")
+    except requests.exceptions.RequestException as e:
+        print(f"⚠️ Erro de requisição: {e}")
 
 def atualizar_tarefa(id, title=None, done=None):
     dados = {}
@@ -34,29 +45,44 @@ def atualizar_tarefa(id, title=None, done=None):
         dados["title"] = title
     if done is not None:
         dados["done"] = done
-    resposta = requests.put(f"{BASE_URL}/{id}", json=dados)
-    if resposta.status_code == 200:
-        print("Tarefa atualizada com sucesso!")
-    else:
-        print("Erro ao atualizar tarefa.")
+    try:
+        resposta = requests.put(f"{BASE_URL}/{id}", json=dados)
+        if resposta.status_code == 200:
+            print("Tarefa atualizada com sucesso!")
+        else:
+            print("Erro ao atualizar tarefa.")
+    except requests.exceptions.ConnectionError:
+        print("⚠️ Servidor está desligado ou inacessível. Tente novamente mais tarde")
+    except requests.exceptions.RequestException as e:
+        print(f"⚠️ Erro de requisição: {e}")
 
 def deletar_tarefa(id):
-    resposta = requests.delete(f"{BASE_URL}/{id}")
-    if resposta.status_code == 200:
-        print("Tarefa deletada com sucesso!")
-    else:
-        print("Erro ao deletar tarefa.")
+    try:
+        resposta = requests.delete(f"{BASE_URL}/{id}")
+        if resposta.status_code == 200:
+            print("Tarefa deletada com sucesso!")
+        else:
+            print("Erro ao deletar tarefa.")
+    except requests.exceptions.ConnectionError:
+        print("⚠️ Servidor está desligado ou inacessível. Tente novamente mais tarde")
+    except requests.exceptions.RequestException as e:
+        print(f"⚠️ Erro de requisição: {e}")
 
 def visualizar_tarefa(id):
-    resposta = requests.get(f"{BASE_URL}/{id}")
-    if resposta.status_code == 200:
-        tarefa = resposta.json()
-        done = "✅ Concluída" if tarefa['done'] else "❌ Pendente"
-        print(f"ID: {tarefa['id']} | {tarefa['title']} | {done}")
-        print(f"Descrição: {tarefa.get('description', 'Sem descrição')}")
-        print("-" * 50)
-    else:
-        print("Tarefa não encontrada.")
+    try:
+        resposta = requests.get(f"{BASE_URL}/{id}")
+        if resposta.status_code == 200:
+            tarefa = resposta.json()
+            done = "✅ Concluída" if tarefa['done'] else "❌ Pendente"
+            print(f"ID: {tarefa['id']} | {tarefa['title']} | {done}")
+            print(f"Descrição: {tarefa.get('description', 'Sem descrição')}")
+            print("-" * 50)
+        else:
+            print("Tarefa não encontrada.")
+    except requests.exceptions.ConnectionError:
+        print("⚠️ Servidor está desligado ou inacessível. Tente novamente mais tarde")
+    except requests.exceptions.RequestException as e:
+        print(f"⚠️ Erro de requisição: {e}")
 
 def menu():
     while True:
